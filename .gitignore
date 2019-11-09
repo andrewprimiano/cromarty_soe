@@ -1,0 +1,6 @@
+# Project exclude paths
+/soe-build/target/
+/soe-client/target/
+/soe-common/target/
+/soe-designer/target/
+/soe-gateway/target/
