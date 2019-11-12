@@ -17,12 +17,14 @@ public class ClientHook extends AbstractClientModuleHook {
     @Override
     public void startup(ClientContext context, LicenseState activationState) throws Exception {
         super.startup(context, activationState);
+
     }
 
     @Override
     public void initializeScriptManager(ScriptManager scriptManager)
     {
         scriptManager.addScriptModule("system.soe", ModuleRPCFactory.create("com.cromarty.ignition.soe", EventRPC.class));
+
     }
 
     @Override

@@ -3,25 +3,19 @@ package com.cromarty.ignition;
 import com.cromarty.ignition.event.EventConsumer;
 import com.cromarty.ignition.soe.EventActionHandler;
 import com.cromarty.ignition.soe.SOE_RPC;
-import com.inductiveautomation.ignition.common.WellKnownPathTypes;
+import com.cromarty.ignition.soe.SOE_TagPropContributor;
 import com.inductiveautomation.ignition.common.alarming.AlarmEvent;
 import com.inductiveautomation.ignition.common.alarming.AlarmListener;
-import com.inductiveautomation.ignition.common.execution.impl.BasicExecutionEngine;
-import com.inductiveautomation.ignition.common.licensing.LicenseDetails;
-import com.inductiveautomation.ignition.common.licensing.LicenseMode;
+import com.inductiveautomation.ignition.common.config.ConfigurationPropertyModel;
 import com.inductiveautomation.ignition.common.licensing.LicenseState;
-import com.inductiveautomation.ignition.common.licensing.ModuleLicense;
 import com.inductiveautomation.ignition.common.project.*;
 import com.inductiveautomation.ignition.common.project.resource.ProjectResource;
 import com.inductiveautomation.ignition.common.project.resource.ResourcePath;
 import com.inductiveautomation.ignition.common.project.resource.ResourceType;
 import com.inductiveautomation.ignition.common.script.JythonExecException;
-import com.inductiveautomation.ignition.common.script.ScriptManager;
 import com.inductiveautomation.ignition.common.script.builtin.PyArgumentMap;
-import com.inductiveautomation.ignition.common.tags.paths.parser.TagPathParser;
 import com.inductiveautomation.ignition.common.xmlserialization.SerializationException;
 import com.inductiveautomation.ignition.common.xmlserialization.deserialization.XMLDeserializer;
-import com.inductiveautomation.ignition.common.xmlserialization.serialization.XMLSerializer;
 import com.inductiveautomation.ignition.gateway.alarming.AlarmManager;
 import com.inductiveautomation.ignition.gateway.clientcomm.ClientReqSession;
 import com.inductiveautomation.ignition.gateway.model.AbstractGatewayModuleHook;
@@ -29,22 +23,17 @@ import com.inductiveautomation.ignition.alarming.common.ModuleMeta;
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 import com.inductiveautomation.ignition.common.QualifiedPath;
 import com.inductiveautomation.ignition.common.BundleUtil;
-import com.inductiveautomation.ignition.gateway.services.ModuleServiceConsumer;
+import com.inductiveautomation.ignition.gateway.model.GatewayModuleHook;
 
-import com.jidesoft.plaf.basic.Resource;
-import org.joda.time.DateTime;
+import com.inductiveautomation.ignition.gateway.tags.managed.ManagedTagProvider;
 import org.python.core.*;
 import soe.EventProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.Reader;
-import java.lang.reflect.Array;
 import java.util.*;
 
-public class GatewayHook extends AbstractGatewayModuleHook implements EventConsumer<SOE_Event>, AlarmListener, ProjectResourceListener, ProjectListener {
+public class GatewayHook extends AbstractGatewayModuleHook implements EventConsumer<SOE_Event>, AlarmListener, ProjectResourceListener, ProjectListener, GatewayModuleHook {
 
     public static final String MODULE_ID = "com.cromarty.ignition.soe";
 
@@ -55,6 +44,11 @@ public class GatewayHook extends AbstractGatewayModuleHook implements EventConsu
     private EventActionHandler eventActionHandler;
     private ArrayList<SOE_Script> scripts;
     private ArrayList<Project> subscribedProjects = new ArrayList<>();
+    private SOE_TagPropContributor tagPropContributor;
+    private ManagedTagProvider ourProvider;
+
+    private ConfigurationPropertyModel prop;
+    private SOE_TagPropContributor contributor;
 
     @Override
     public void setup(GatewayContext gatewayContext) {
@@ -75,10 +69,9 @@ public class GatewayHook extends AbstractGatewayModuleHook implements EventConsu
         this.addProjectListeners();
         gatewayContext.getProjectManager().addProjectListener(this);
 
-
+        contributor = new SOE_TagPropContributor();
+        gatewayContext.getTagManager().getConfigManager().registerTagPropertyContributor(contributor);
     }
-
-
 
     @Override
     public void startup(LicenseState licenseState) {
@@ -91,6 +84,7 @@ public class GatewayHook extends AbstractGatewayModuleHook implements EventConsu
         gatewayContext.getProjectManager().addProjectListener(this);
         BundleUtil.get().removeBundle("EventProperties");
         this.removeProjectListeners();
+        gatewayContext.getTagManager().getConfigManager().unregisterTagPropertyContributor(contributor);
     }
 
     private void addProjectListeners()
@@ -172,30 +166,32 @@ public class GatewayHook extends AbstractGatewayModuleHook implements EventConsu
         this.loadScripts();
     }
 
-    public Object getRPCHandler(ClientReqSession session, Long projectId) {
+    @Override
+    public Object getRPCHandler(ClientReqSession session, String projectId) {
         SOE_RPC RPC_Endpoint = new SOE_RPC();
         RPC_Endpoint.getEventProducer().addEventListener(this);
         return RPC_Endpoint;
     }
 
 
+
     private void runScripts(SOE_Event event)
     {
         for (SOE_Script script:scripts){
-            try {
-                PyObject argMap[] = new PyObject[1];
-                String keywords[] = new String[1];
-                Class<SOE_Event>[] types = new Class[1];
+            if(script.getEnabled()) {
+                try {
+                    PyObject argMap[] = new PyObject[1];
+                    String keywords[] = new String[1];
+                    Class<SOE_Event>[] types = new Class[1];
 
-
-                argMap[0] = Py.java2py(event);
-                keywords[0] = "event";
-                types[0] = SOE_Event.class;
-                PyArgumentMap args = PyArgumentMap.interpretPyArgs(argMap,keywords,keywords,types);
-                gatewayContext.getScriptManager().runCode(script.getUserScript(),Py.java2py(args), null,null);
-            }
-            catch (JythonExecException e) {
-                logger.info(e.toString());
+                    argMap[0] = Py.java2py(event);
+                    keywords[0] = "event";
+                    types[0] = SOE_Event.class;
+                    PyArgumentMap args = PyArgumentMap.interpretPyArgs(argMap, keywords, keywords, types);
+                    gatewayContext.getScriptManager().runCode(script.getUserScript(), Py.java2py(args), null, null);
+                } catch (JythonExecException e) {
+                    logger.info(e.toString());
+                }
             }
         }
     }
