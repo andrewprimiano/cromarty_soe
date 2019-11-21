@@ -4,8 +4,11 @@ import com.cromarty.ignition.event.EventConsumer;
 import com.cromarty.ignition.soe.EventActionHandler;
 import com.cromarty.ignition.soe.SOE_RPC;
 import com.cromarty.ignition.soe.SOE_TagPropContributor;
+import com.inductiveautomation.ignition.common.TagPathUtils;
 import com.inductiveautomation.ignition.common.alarming.AlarmEvent;
 import com.inductiveautomation.ignition.common.alarming.AlarmListener;
+import com.inductiveautomation.ignition.common.browsing.BrowseFilter;
+import com.inductiveautomation.ignition.common.browsing.Results;
 import com.inductiveautomation.ignition.common.config.ConfigurationPropertyModel;
 import com.inductiveautomation.ignition.common.licensing.LicenseState;
 import com.inductiveautomation.ignition.common.project.*;
@@ -14,6 +17,17 @@ import com.inductiveautomation.ignition.common.project.resource.ResourcePath;
 import com.inductiveautomation.ignition.common.project.resource.ResourceType;
 import com.inductiveautomation.ignition.common.script.JythonExecException;
 import com.inductiveautomation.ignition.common.script.builtin.PyArgumentMap;
+import com.inductiveautomation.ignition.common.sqltags.model.TagProp;
+import com.inductiveautomation.ignition.common.tags.model.event.TagChangeEvent;
+import com.inductiveautomation.ignition.common.tags.model.event.InvalidListenerException;
+import com.inductiveautomation.ignition.common.tags.model.event.TagChangeListener;
+import com.inductiveautomation.ignition.common.sqltags.parser.TagPathComponent;
+import com.inductiveautomation.ignition.common.tags.browsing.NodeAttribute;
+import com.inductiveautomation.ignition.common.tags.browsing.NodeDescription;
+import com.inductiveautomation.ignition.common.tags.model.TagPath;
+import com.inductiveautomation.ignition.common.tags.model.TagProvider;
+import com.inductiveautomation.ignition.common.tags.model.TagProviderInformation;
+import com.inductiveautomation.ignition.common.tags.paths.parser.TagPathParser;
 import com.inductiveautomation.ignition.common.xmlserialization.SerializationException;
 import com.inductiveautomation.ignition.common.xmlserialization.deserialization.XMLDeserializer;
 import com.inductiveautomation.ignition.gateway.alarming.AlarmManager;
@@ -31,9 +45,12 @@ import soe.EventProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
-public class GatewayHook extends AbstractGatewayModuleHook implements EventConsumer<SOE_Event>, AlarmListener, ProjectResourceListener, ProjectListener, GatewayModuleHook {
+public class GatewayHook extends AbstractGatewayModuleHook implements EventConsumer<SOE_Event>, AlarmListener, ProjectResourceListener, ProjectListener, GatewayModuleHook, TagChangeListener {
 
     public static final String MODULE_ID = "com.cromarty.ignition.soe";
 
@@ -71,6 +88,30 @@ public class GatewayHook extends AbstractGatewayModuleHook implements EventConsu
 
         contributor = new SOE_TagPropContributor();
         gatewayContext.getTagManager().getConfigManager().registerTagPropertyContributor(contributor);
+
+        for (TagProvider provider:gatewayContext.getTagManager().getTagProviders())
+        {
+            try {
+                TagPath myPath= TagPathParser.parse("["+provider.getName()+"]");
+
+                Results<NodeDescription> tags = provider.browseAsync(myPath, new BrowseFilter()).get();
+
+                ;
+                for (NodeDescription tag:tags.getResults())
+                {
+//                    tag=tag.
+                }
+
+                List <TagPath> lista= new ArrayList<TagPath>();
+                lista.add(myPath);
+                
+                
+                
+                gatewayContext.getTagManager().subscribeAsync(myPath, (TagChangeListener) this);
+            } catch (IOException | InterruptedException | ExecutionException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     @Override
@@ -226,6 +267,12 @@ public class GatewayHook extends AbstractGatewayModuleHook implements EventConsu
     @Override
     public void onEventReceived(SOE_Event EventData) {
         this.runScripts(EventData);
+    }
+
+
+    @Override
+    public void tagChanged(TagChangeEvent tagChangeEvent) throws InvalidListenerException {
+
     }
 }
 
