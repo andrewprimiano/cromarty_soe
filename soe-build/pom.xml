@@ -75,7 +75,7 @@
                     <moduleName>${project.parent.name}</moduleName>
                     <moduleDescription>${project.description}</moduleDescription>
                     <moduleVersion>1.0.0-SNAPSHOT</moduleVersion>
-                    <requiredIgnitionVersion>8.0.3</requiredIgnitionVersion>
+                    <requiredIgnitionVersion>7.9.0</requiredIgnitionVersion>
 
                     <hooks>
                         <hook>
